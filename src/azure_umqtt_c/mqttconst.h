@@ -49,6 +49,13 @@ typedef struct APP_PAYLOAD_TAG
     size_t length;
 } APP_PAYLOAD;
 
+typedef bool (* MQTT_STREAM_GET_NEXT) (unsigned long *dest);
+typedef struct APP_STREAMINIG_TAG
+{
+	MQTT_STREAM_GET_NEXT getNextElement;
+    size_t length;
+} APP_STREAMING;
+
 typedef struct MQTT_CLIENT_OPTIONS_TAG
 {
     char* clientId;

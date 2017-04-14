@@ -21,6 +21,7 @@ extern "C" {
 typedef struct MQTT_MESSAGE_TAG* MQTT_MESSAGE_HANDLE;
 
 MOCKABLE_FUNCTION(, MQTT_MESSAGE_HANDLE, mqttmessage_create, uint16_t, packetId, const char*, topicName, QOS_VALUE, qosValue, const uint8_t*, appMsg, size_t, appMsgLength);
+MOCKABLE_FUNCTION(, MQTT_MESSAGE_HANDLE, mqttmessage_createStreaming, uint16_t, packetId, const char*, topicName, QOS_VALUE, qosValue, MQTT_STREAM_GET_NEXT, appMsg, size_t, appMsgLength);
 MOCKABLE_FUNCTION(,void, mqttmessage_destroy, MQTT_MESSAGE_HANDLE, handle);
 MOCKABLE_FUNCTION(,MQTT_MESSAGE_HANDLE, mqttmessage_clone, MQTT_MESSAGE_HANDLE, handle);
 
@@ -29,9 +30,11 @@ MOCKABLE_FUNCTION(, const char*, mqttmessage_getTopicName, MQTT_MESSAGE_HANDLE, 
 MOCKABLE_FUNCTION(, QOS_VALUE, mqttmessage_getQosType, MQTT_MESSAGE_HANDLE, handle);
 MOCKABLE_FUNCTION(, bool, mqttmessage_getIsDuplicateMsg, MQTT_MESSAGE_HANDLE, handle);
 MOCKABLE_FUNCTION(, bool, mqttmessage_getIsRetained, MQTT_MESSAGE_HANDLE, handle);
+MOCKABLE_FUNCTION(, bool, mqttmessage_getIsStreaming, MQTT_MESSAGE_HANDLE, handle);
 MOCKABLE_FUNCTION(, int, mqttmessage_setIsDuplicateMsg, MQTT_MESSAGE_HANDLE, handle, bool, duplicateMsg);
 MOCKABLE_FUNCTION(, int, mqttmessage_setIsRetained, MQTT_MESSAGE_HANDLE, handle, bool, retainMsg);
 MOCKABLE_FUNCTION(, const APP_PAYLOAD*, mqttmessage_getApplicationMsg, MQTT_MESSAGE_HANDLE, handle);
+MOCKABLE_FUNCTION(, const APP_STREAMING*, mqttmessage_getApplicationStream, MQTT_MESSAGE_HANDLE, handle);
 
 #ifdef __cplusplus
 }

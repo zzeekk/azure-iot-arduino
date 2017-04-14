@@ -24,10 +24,12 @@ typedef struct IOTHUB_MESSAGE_HANDLE_DATA_TAG
     {
         BUFFER_HANDLE byteArray;
         STRING_HANDLE string;
+        IOTHUB_MESSAGE_STREAM_GET_NEXT getNextElement;
     } value;
     MAP_HANDLE properties;
     char* messageId;
     char* correlationId;
+    size_t msgSize;
 }IOTHUB_MESSAGE_HANDLE_DATA;
 
 static bool ContainsOnlyUsAscii(const char* asciiValue)
@@ -122,6 +124,7 @@ IOTHUB_MESSAGE_HANDLE IoTHubMessage_CreateFromByteArray(const unsigned char* byt
                 result->contentType = IOTHUBMESSAGE_BYTEARRAY;
                 result->messageId = NULL;
                 result->correlationId = NULL;
+                result->msgSize = size;
                 /*all is fine, return result*/
             }
         }
@@ -161,13 +164,42 @@ IOTHUB_MESSAGE_HANDLE IoTHubMessage_CreateFromString(const char* source)
         {
             /*Codes_SRS_IOTHUBMESSAGE_02_031: [Otherwise, IoTHubMessage_CreateFromString shall return a non-NULL handle.] */
             /*Codes_SRS_IOTHUBMESSAGE_02_032: [The type of the new message shall be IOTHUBMESSAGE_STRING.] */
-            result->contentType = IOTHUBMESSAGE_STRING;
+        	result->contentType = IOTHUBMESSAGE_STRING;
             result->messageId = NULL;
             result->correlationId = NULL;
+            result->msgSize = strlen(source)+1;
         }
     }
     return result;
 }
+
+IOTHUB_MESSAGE_HANDLE IoTHubMessage_CreateFromStream(IOTHUB_MESSAGE_STREAM_GET_NEXT getNextElement, size_t msgsize)
+{
+    IOTHUB_MESSAGE_HANDLE_DATA* result;
+    result = malloc(sizeof(IOTHUB_MESSAGE_HANDLE_DATA));
+    if (result == NULL)
+    {
+        LogError("malloc failed");
+    }
+    else
+    {
+        result->value.getNextElement = getNextElement;
+        if ((result->properties = Map_Create(ValidateAsciiCharactersFilter)) == NULL)
+        {
+            LogError("Map_Create failed");
+            free(result);
+            result = NULL;
+        }
+        else {
+			result->contentType = IOTHUBMESSAGE_STREAM;
+			result->messageId = NULL;
+			result->correlationId = NULL;
+            result->msgSize = msgsize;
+        }
+    }
+    return result;
+}
+
 
 /*Codes_SRS_IOTHUBMESSAGE_03_001: [IoTHubMessage_Clone shall create a new IoT hub message with data content identical to that of the iotHubMessageHandle parameter.]*/
 IOTHUB_MESSAGE_HANDLE IoTHubMessage_Clone(IOTHUB_MESSAGE_HANDLE iotHubMessageHandle)
@@ -194,6 +226,7 @@ IOTHUB_MESSAGE_HANDLE IoTHubMessage_Clone(IOTHUB_MESSAGE_HANDLE iotHubMessageHan
         {
             result->messageId = NULL;
             result->correlationId = NULL;
+            result->msgSize = source->msgSize;
             if (source->messageId != NULL && mallocAndStrcpy_s(&result->messageId, source->messageId) != 0)
             {
                 LogError("unable to Copy messageId");
@@ -257,10 +290,34 @@ IOTHUB_MESSAGE_HANDLE IoTHubMessage_Clone(IOTHUB_MESSAGE_HANDLE iotHubMessageHan
                     /*return as is, this is a good result*/
                 }
             }
+            if (source->contentType == IOTHUBMESSAGE_STREAM) {
+            	result->value.getNextElement = source->value.getNextElement;
+                if ((result->properties = Map_Clone(source->properties)) == NULL)
+                {
+                    /*Codes_SRS_IOTHUBMESSAGE_03_004: [IoTHubMessage_Clone shall return NULL if it fails for any reason.]*/
+                    LogError("unable to Map_Clone");
+                    if (result->messageId)
+                    {
+                        free(result->messageId);
+                        result->messageId = NULL;
+                    }
+                    if (result->correlationId != NULL)
+                    {
+                        free(result->correlationId);
+                        result->correlationId = NULL;
+                    }
+                    free(result);
+                    result = NULL;
+                }
+                else
+                {
+                    result->contentType = IOTHUBMESSAGE_STREAM;
+                }
+            }
             else /*can only be STRING*/
             {
                 /*Codes_SRS_IOTHUBMESSAGE_02_006: [IoTHubMessage_Clone shall clone the content by a call to BUFFER_clone or STRING_clone] */
-                if ((result->value.string = STRING_clone(source->value.string)) == NULL)
+            	if ((result->value.string = STRING_clone(source->value.string)) == NULL)
                 {
                     /*Codes_SRS_IOTHUBMESSAGE_03_004: [IoTHubMessage_Clone shall return NULL if it fails for any reason.]*/
                     if (result->messageId)
@@ -278,28 +335,30 @@ IOTHUB_MESSAGE_HANDLE IoTHubMessage_Clone(IOTHUB_MESSAGE_HANDLE iotHubMessageHan
                     LogError("failed to STRING_clone");
                 }
                 /*Codes_SRS_IOTHUBMESSAGE_02_005: [IoTHubMessage_Clone shall clone the properties map by using Map_Clone.] */
-                else if ((result->properties = Map_Clone(source->properties)) == NULL)
-                {
-                    /*Codes_SRS_IOTHUBMESSAGE_03_004: [IoTHubMessage_Clone shall return NULL if it fails for any reason.]*/
-                    LogError("unable to Map_Clone");
-                    STRING_delete(result->value.string);
-                    if (result->messageId)
-                    {
-                        free(result->messageId);
-                        result->messageId = NULL;
-                    }
-                    if (result->correlationId != NULL)
-                    {
-                        free(result->correlationId);
-                        result->correlationId = NULL;
-                    }
-                    free(result);
-                    result = NULL;
-                }
-                else
-                {
-                    result->contentType = IOTHUBMESSAGE_STRING;
-                    /*all is fine*/
+                else {
+                	if ((result->properties = Map_Clone(source->properties)) == NULL)
+					{
+						/*Codes_SRS_IOTHUBMESSAGE_03_004: [IoTHubMessage_Clone shall return NULL if it fails for any reason.]*/
+						LogError("unable to Map_Clone");
+						STRING_delete(result->value.string);
+						if (result->messageId)
+						{
+							free(result->messageId);
+							result->messageId = NULL;
+						}
+						if (result->correlationId != NULL)
+						{
+							free(result->correlationId);
+							result->correlationId = NULL;
+						}
+						free(result);
+						result = NULL;
+					}
+					else
+					{
+						result->contentType = IOTHUBMESSAGE_STRING;
+						/*all is fine*/
+					}
                 }
             }
         }
@@ -364,6 +423,31 @@ const char* IoTHubMessage_GetString(IOTHUB_MESSAGE_HANDLE iotHubMessageHandle)
         }
     }
     return result;
+}
+
+IOTHUB_MESSAGE_STREAM_GET_NEXT IoTHubMessage_GetStream(IOTHUB_MESSAGE_HANDLE iotHubMessageHandle, size_t* size)
+{
+    if (iotHubMessageHandle == NULL)
+    {
+        /*Codes_SRS_IOTHUBMESSAGE_02_016: [If any parameter is NULL then IoTHubMessage_GetString  shall return NULL.] */
+        return NULL;
+    }
+    else
+    {
+        IOTHUB_MESSAGE_HANDLE_DATA* handleData = iotHubMessageHandle;
+        if (handleData->contentType != IOTHUBMESSAGE_STREAM)
+        {
+            /*Codes_SRS_IOTHUBMESSAGE_02_017: [IoTHubMessage_GetString shall return NULL if the iotHubMessageHandle does not refer to a IOTHUBMESSAGE of type STRING.] */
+        	*size = 0;
+            return NULL;
+        }
+        else
+        {
+            /*Codes_SRS_IOTHUBMESSAGE_02_018: [IoTHubMessage_GetStringData shall return the currently stored null terminated string.] */
+        	*size = handleData->msgSize;
+            return handleData->value.getNextElement;
+        }
+    }
 }
 
 IOTHUBMESSAGE_CONTENT_TYPE IoTHubMessage_GetContentType(IOTHUB_MESSAGE_HANDLE iotHubMessageHandle)
@@ -511,9 +595,8 @@ void IoTHubMessage_Destroy(IOTHUB_MESSAGE_HANDLE iotHubMessageHandle)
         {
             BUFFER_delete(handleData->value.byteArray);
         }
-        else
+        else if (handleData->contentType == IOTHUBMESSAGE_STRING)
         {
-            /*can only be STRING*/
             STRING_delete(handleData->value.string);
         }
         Map_Destroy(handleData->properties);

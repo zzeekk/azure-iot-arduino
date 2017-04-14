@@ -35,6 +35,7 @@ DEFINE_ENUM(IOTHUB_MESSAGE_RESULT, IOTHUB_MESSAGE_RESULT_VALUES);
 #define IOTHUBMESSAGE_CONTENT_TYPE_VALUES \
 IOTHUBMESSAGE_BYTEARRAY, \
 IOTHUBMESSAGE_STRING, \
+IOTHUBMESSAGE_STREAM, \
 IOTHUBMESSAGE_UNKNOWN \
 
 /** @brief Enumeration specifying the content type of the a given  
@@ -43,6 +44,8 @@ IOTHUBMESSAGE_UNKNOWN \
 DEFINE_ENUM(IOTHUBMESSAGE_CONTENT_TYPE, IOTHUBMESSAGE_CONTENT_TYPE_VALUES);
 
 typedef struct IOTHUB_MESSAGE_HANDLE_DATA_TAG* IOTHUB_MESSAGE_HANDLE;
+
+typedef bool (* IOTHUB_MESSAGE_STREAM_GET_NEXT) (unsigned long *dest);
 
 /**
  * @brief   Creates a new IoT hub message from a byte array. The type of the
@@ -67,6 +70,18 @@ MOCKABLE_FUNCTION(, IOTHUB_MESSAGE_HANDLE, IoTHubMessage_CreateFromByteArray, co
  *          created or @c NULL in case an error occurs.
  */
 MOCKABLE_FUNCTION(, IOTHUB_MESSAGE_HANDLE, IoTHubMessage_CreateFromString, const char*, source);
+
+/**
+ * @brief   Creates a new IoT hub message from a null terminated string.  The
+ *          type of the message will be set to @c IOTHUBMESSAGE_STRING.
+ *
+ * @param   source  The null terminated string from which the message is to be
+ *                  created.
+ *
+ * @return  A valid @c IOTHUB_MESSAGE_HANDLE if the message was successfully
+ *          created or @c NULL in case an error occurs.
+ */
+MOCKABLE_FUNCTION(, IOTHUB_MESSAGE_HANDLE, IoTHubMessage_CreateFromStream, IOTHUB_MESSAGE_STREAM_GET_NEXT, getNextElement, size_t, msgsize);
 
 /**
  * @brief   Creates a new IoT hub message with the content identical to that
