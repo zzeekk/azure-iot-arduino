@@ -149,7 +149,7 @@ static int deviceMethodCallback(const char* method_name, const unsigned char* pa
 
         /*Codes_SRS_SERIALIZERDEVICETWIN_02_022: [ deviceMethodCallback shall call EXECUTE_METHOD passing the userContextCallback, method_name and the null terminated string build before. ]*/
         METHODRETURN_HANDLE mr = EXECUTE_METHOD(userContextCallback, method_name, payloadZeroTerminated);
-        
+
         if (mr == NULL)
         {
             LogError("failure in EXECUTE_METHOD");
@@ -220,7 +220,7 @@ typedef struct SERIALIZER_DEVICETWIN_PROTOHANDLE_TAG /*it is called "PROTOHANDLE
     IOTHUB_CLIENT_HANDLE_VARIANT iothubClientHandleVariant;
     void* deviceAssigned;
 } SERIALIZER_DEVICETWIN_PROTOHANDLE;
- 
+
 static VECTOR_HANDLE g_allProtoHandles=NULL; /*contains SERIALIZER_DEVICETWIN_PROTOHANDLE*/
 
 static int lazilyAddProtohandle(const SERIALIZER_DEVICETWIN_PROTOHANDLE* protoHandle)
@@ -262,6 +262,9 @@ static IOTHUB_CLIENT_RESULT Generic_IoTHubClient_SetCallbacks(const SERIALIZER_D
     {
     case IOTHUB_CLIENT_CONVENIENCE_HANDLE_TYPE:
     {
+        #ifdef ARDUINO
+            LogError("failure in IoTHubClient_SetDeviceTwinCallback: IOTHUB_CLIENT_CONVENIENCE_HANDLE_TYPE not supported");
+        #else
         if ((result = IoTHubClient_SetDeviceTwinCallback(protoHandle->iothubClientHandleVariant.iothubClientHandleValue.iothubClientHandle, deviceTwinCallback, userContextCallback)) != IOTHUB_CLIENT_OK)
         {
             LogError("failure in IoTHubClient_SetDeviceTwinCallback");
@@ -275,6 +278,7 @@ static IOTHUB_CLIENT_RESULT Generic_IoTHubClient_SetCallbacks(const SERIALIZER_D
                 LogError("failure in IoTHubClient_SetDeviceMethodCallback");
             }
         }
+        #endif
         break;
     }
     case IOTHUB_CLIENT_LL_HANDLE_TYPE:
@@ -550,5 +554,3 @@ static IOTHUB_CLIENT_RESULT IoTHubDeviceTwin_SendReportedState_Impl(void* model,
     }                                                                                                                                                                               \
 
 #endif /*SERIALIZER_DEVICE_TWIN_H*/
-
-
