@@ -833,7 +833,7 @@ static STRING_HANDLE addPropertiesTouMqttMessage(IOTHUB_MESSAGE_HANDLE iothub_me
     return result;
 }
 
-static int publish_mqtt_telemetry_msg(PMQTTTRANSPORT_HANDLE_DATA transport_data, MQTT_MESSAGE_DETAILS_LIST* mqttMsgEntry, const unsigned char* payload, size_t len)
+static int publish_mqtt_telemetry_msg(PMQTTTRANSPORT_HANDLE_DATA transport_data, MQTT_MESSAGE_DETAILS_LIST* mqttMsgEntry, const unsigned char* payload, size_t len, bool streaming)
 {
     int result;
     STRING_HANDLE msgTopic = addPropertiesTouMqttMessage(mqttMsgEntry->iotHubMessageEntry->messageHandle, STRING_c_str(transport_data->topic_MqttEvent));
@@ -843,9 +843,15 @@ static int publish_mqtt_telemetry_msg(PMQTTTRANSPORT_HANDLE_DATA transport_data,
     }
     else
     {
-        MQTT_MESSAGE_HANDLE mqttMsg = mqttmessage_create(mqttMsgEntry->packet_id, STRING_c_str(msgTopic), DELIVER_AT_LEAST_ONCE, payload, len);
+        MQTT_MESSAGE_HANDLE mqttMsg = NULL;
+        if (streaming) {
+        	mqttMsg = mqttmessage_createStreaming(mqttMsgEntry->packet_id, STRING_c_str(msgTopic), DELIVER_AT_MOST_ONCE, (MQTT_STREAM_GET_NEXT)payload, len);
+        } else {
+        	mqttMsg = mqttmessage_create(mqttMsgEntry->packet_id, STRING_c_str(msgTopic), DELIVER_AT_LEAST_ONCE, payload, len);
+        }
         if (mqttMsg == NULL)
         {
+            LogError("Failed constructing mqtt message.");
             result = __FAILURE__;
         }
         else
@@ -859,6 +865,7 @@ static int publish_mqtt_telemetry_msg(PMQTTTRANSPORT_HANDLE_DATA transport_data,
             {
                 if (mqtt_client_publish(transport_data->mqttClient, mqttMsg) != 0)
                 {
+                    LogError("Failed publishing msg");
                     result = __FAILURE__;
                 }
                 else
@@ -1570,9 +1577,10 @@ static void SubscribeToMqttProtocol(PMQTTTRANSPORT_HANDLE_DATA transport_data)
     }
 }
 
-static const unsigned char* RetrieveMessagePayload(IOTHUB_MESSAGE_HANDLE messageHandle, size_t* length)
+static const unsigned char* RetrieveMessagePayload(IOTHUB_MESSAGE_HANDLE messageHandle, size_t* length, bool* streaming)
 {
     const unsigned char* result;
+	*streaming = false;
 
     IOTHUBMESSAGE_CONTENT_TYPE contentType = IoTHubMessage_GetContentType(messageHandle);
     if (contentType == IOTHUBMESSAGE_BYTEARRAY)
@@ -1597,6 +1605,10 @@ static const unsigned char* RetrieveMessagePayload(IOTHUB_MESSAGE_HANDLE message
         {
             *length = strlen((const char*)result);
         }
+    }
+    else if (contentType == IOTHUBMESSAGE_STREAM) {
+    	result = (const unsigned char*)IoTHubMessage_GetStream(messageHandle, length);
+    	*streaming = true;
     }
     else
     {
@@ -2468,14 +2480,15 @@ void IoTHubTransport_MQTT_Common_DoWork(TRANSPORT_LL_HANDLE handle, IOTHUB_CLIEN
                         else
                         {
                             size_t messageLength;
-                            const unsigned char* messagePayload = RetrieveMessagePayload(mqttMsgEntry->iotHubMessageEntry->messageHandle, &messageLength);
+                            bool messageStreaming;
+                            const unsigned char* messagePayload = RetrieveMessagePayload(mqttMsgEntry->iotHubMessageEntry->messageHandle, &messageLength, &messageStreaming);
                             if (messageLength == 0 || messagePayload == NULL)
                             {
                                 LogError("Failure from creating Message IoTHubMessage_GetData");
                             }
                             else
                             {
-                                if (publish_mqtt_telemetry_msg(transport_data, mqttMsgEntry, messagePayload, messageLength) != 0)
+                                if (publish_mqtt_telemetry_msg(transport_data, mqttMsgEntry, messagePayload, messageLength, false) != 0)
                                 {
                                     (void)DList_RemoveEntryList(currentListEntry);
                                     sendMsgComplete(mqttMsgEntry->iotHubMessageEntry, transport_data, IOTHUB_CLIENT_CONFIRMATION_ERROR);
@@ -2496,8 +2509,9 @@ void IoTHubTransport_MQTT_Common_DoWork(TRANSPORT_LL_HANDLE handle, IOTHUB_CLIEN
                     savedFromCurrentListEntry.Flink = currentListEntry->Flink;
 
                     /* Codes_SRS_IOTHUB_MQTT_TRANSPORT_07_027: [IoTHubTransport_MQTT_Common_DoWork shall inspect the "waitingToSend" DLIST passed in config structure.] */
-                    size_t messageLength;
-                    const unsigned char* messagePayload = RetrieveMessagePayload(iothubMsgList->messageHandle, &messageLength);
+                    size_t messageLength = 0;
+                    bool messageStreaming = false;
+                    const unsigned char* messagePayload = RetrieveMessagePayload(iothubMsgList->messageHandle, &messageLength, &messageStreaming);
                     if (messageLength == 0 || messagePayload == NULL)
                     {
                         LogError("Failure result from IoTHubMessage_GetData");
@@ -2515,14 +2529,19 @@ void IoTHubTransport_MQTT_Common_DoWork(TRANSPORT_LL_HANDLE handle, IOTHUB_CLIEN
                             mqttMsgEntry->retryCount = 0;
                             mqttMsgEntry->iotHubMessageEntry = iothubMsgList;
                             mqttMsgEntry->packet_id = get_next_packet_id(transport_data);
-                            if (publish_mqtt_telemetry_msg(transport_data, mqttMsgEntry, messagePayload, messageLength) != 0)
+                            if (publish_mqtt_telemetry_msg(transport_data, mqttMsgEntry, messagePayload, messageLength, messageStreaming) != 0)
                             {
                                 (void)(DList_RemoveEntryList(currentListEntry));
                                 sendMsgComplete(iothubMsgList, transport_data, IOTHUB_CLIENT_CONFIRMATION_ERROR);
                                 free(mqttMsgEntry);
                             }
-                            else
-                            {
+                            else if(messageStreaming) {
+                            	// QoS is DELIVER_AT_MOST_ONCE -> send confirmation directly
+                                (void)(DList_RemoveEntryList(currentListEntry));
+                                sendMsgComplete(iothubMsgList, transport_data, IOTHUB_CLIENT_CONFIRMATION_OK);
+                                free(mqttMsgEntry);
+                            } else {
+                            	// QoS is DELIVER_AT_LEAST_ONCE -> acknowledge expected before confirmation
                                 (void)(DList_RemoveEntryList(currentListEntry));
                                 DList_InsertTailList(&(transport_data->telemetry_waitingForAck), &(mqttMsgEntry->entry));
                             }
