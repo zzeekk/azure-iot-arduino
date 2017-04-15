@@ -37,7 +37,7 @@ extern "C"
     FILE_UPLOAD_ERROR
 
     DEFINE_ENUM(IOTHUB_CLIENT_FILE_UPLOAD_RESULT, IOTHUB_CLIENT_FILE_UPLOAD_RESULT_VALUES)
-        typedef void(*IOTHUB_CLIENT_FILE_UPLOAD_CALLBACK)(IOTHUB_CLIENT_FILE_UPLOAD_RESULT result, void* userContextCallback);
+    typedef void(*IOTHUB_CLIENT_FILE_UPLOAD_CALLBACK)(IOTHUB_CLIENT_FILE_UPLOAD_RESULT result, void* userContextCallback);
 
     /**
     * @brief	Creates a IoT Hub client for communication with an existing
@@ -299,6 +299,32 @@ extern "C"
     * @return	IOTHUB_CLIENT_OK upon success or an error code upon failure.
     */
     MOCKABLE_FUNCTION(, IOTHUB_CLIENT_RESULT, IoTHubClient_SetDeviceMethodCallback, IOTHUB_CLIENT_HANDLE, iotHubClientHandle, IOTHUB_CLIENT_DEVICE_METHOD_CALLBACK_ASYNC, deviceMethodCallback, void*, userContextCallback);
+
+    /**
+    * @brief	This API sets callback for async cloud to device method call.
+    *
+    * @param	iotHubClientHandle		        The handle created by a call to the create function.
+    * @param	inboundDeviceMethodCallback     The callback which will be called by IoTHub.
+    * @param	userContextCallback		        User specified context that will be provided to the
+    * 									        callback. This can be @c NULL.
+    *
+    * @return	IOTHUB_CLIENT_OK upon success or an error code upon failure.
+    */
+    MOCKABLE_FUNCTION(, IOTHUB_CLIENT_RESULT, IoTHubClient_SetDeviceMethodCallback_Ex, IOTHUB_CLIENT_HANDLE, iotHubClientHandle, IOTHUB_CLIENT_INBOUND_DEVICE_METHOD_CALLBACK, inboundDeviceMethodCallback, void*, userContextCallback);
+
+
+    /**
+    * @brief	This API responses to a asnyc method callback identified the methodId.
+    *
+    * @param	iotHubClientHandle      The handle created by a call to the create function.
+    * @param	methodId                The methodId of the Device Method callback.
+    * @param	response                The response data for the method callback.
+    * @param	response_size           The size of the response data buffer.
+    * @param	status_response         The status response of the method callback.
+    *
+    * @return	IOTHUB_CLIENT_OK upon success or an error code upon failure.
+    */
+    MOCKABLE_FUNCTION(, IOTHUB_CLIENT_RESULT, IoTHubClient_DeviceMethodResponse, IOTHUB_CLIENT_HANDLE, iotHubClientHandle, METHOD_HANDLE, methodId, const unsigned char*, response, size_t, response_size, int, statusCode);
 
 #ifndef DONT_USE_UPLOADTOBLOB
     /**
